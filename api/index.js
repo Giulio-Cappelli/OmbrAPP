@@ -12,6 +12,8 @@ app.use(Express.json());
 app.use(Express.urlencoded({ extended: true }));
 app.use(cors());
 
+module.exports = app.listen(3000);
+
 var dbConnection = mysql.createConnection({
   host: "127.0.0.1",
   port: "3306",
@@ -63,6 +65,8 @@ app.listen(49146, () => {
  *     responses:
  *       200:
  *         description: Corretta restituzione delle prenotazioni
+ *         content:
+ *           application/json
  *       400:
  *         description: Errore durante la restituzione delle prenotazioni
  *   post:
@@ -110,6 +114,8 @@ app.listen(49146, () => {
  *     responses:
  *       200:
  *         description: Corretta restituzione degli spazi prenotati
+ *         content:
+ *           application/json
  *       400:
  *         description: Errore durante la restituzione degli spazi
  *   post:
@@ -140,6 +146,8 @@ app.listen(49146, () => {
  *     responses:
  *       200:
  *         description: Corretta restituzione degli spazi
+ *         content:
+ *           application/json
  *       400:
  *         description: Errore durante la restituzione degli spazi
  */
@@ -158,8 +166,13 @@ dbConnection.connect(function (err) {
           response.status(400);
           response.send("Errore Query \n\n" + err);
         } else {
-          response.status(200);
-          response.send(result);
+          if (isEmpty(result)) {
+            response.status(500);
+            response.send("L'utente non esiste o non ha effettuato prenotazioni");
+          } else {
+            response.status(200);
+            response.send(result);
+          }
         }
       });
     });
@@ -185,14 +198,14 @@ dbConnection.connect(function (err) {
             response.status(500);
             response.send("Lo spazio con id = " + idSpazio + " non è un ombrellone \n\n");
           } else {
-            dbConnection.query("SELECT * FROM occupazioni o JOIN prenotazioni p ON p.idPrenotazione = o.prenotazione WHERE o.spazio = ? AND p.data = ?", [idSpazio, data], function (err, result) {
+            dbConnection.query("SELECT prenotazioni.data FROM prenotazioni INNER JOIN occupazioni ON prenotazioni.idPrenotazione = occupazioni.prenotazione WHERE occupazioni.spazio = ? AND prenotazioni.data = ?", [idSpazio, data], function (err, result) {
               if (err) {
                 response.status(400);
                 response.send("Errore Query \n\n" + err);
               } else {
                 if (!isEmpty(result)) {
                   response.status(500);
-                  response.send("Lo spazio con id = " + idSpazio + " è già riservato per quella data");
+                  response.send("Lo spazio con id = " + idSpazio + " è già riservato per quella data \n\n");
                 } else {
                   dbConnection.query("INSERT INTO pagamenti (quantitativo, fornitore, utente) VALUES (?, ?, ?)", [quantitativo, idFornitore, idUtente], function (err, result) {
                     if (err) {
@@ -200,35 +213,22 @@ dbConnection.connect(function (err) {
                       response.send("Errore Query \n\n" + err);
                     } else {
                       idPagamento = result.insertId;
-
-                      dbConnection.query("SELECT prenotazioni.data FROM prenotazioni INNER JOIN occupazioni ON prenotazioni.idPrenotazione = occupazioni.prenotazione WHERE occupazioni.spazio = ? AND prenotazioni.data = ?", [idSpazio, data], function (err, result) {
+                      dbConnection.query("INSERT INTO prenotazioni (data, pagamento, utente) VALUES (?, ?, ?)", [data, idPagamento, idUtente], function (err, result) {
                         if (err) {
                           response.status(400);
                           response.send("Errore Query \n\n" + err);
                         } else {
-                          if (!isEmpty(result)) {
-                            response.status(500);
-                            response.send("Lo spazio con id = " + idSpazio + " è già riservato per quella data \n\n");
-                          } else {
-                            dbConnection.query("INSERT INTO prenotazioni (data, pagamento, utente) VALUES (?, ?, ?)", [data, idPagamento, idUtente], function (err, result) {
-                              if (err) {
-                                response.status(400);
-                                response.send("Errore Query \n\n" + err);
-                              } else {
-                                idPrenotazione = result.insertId;
+                          idPrenotazione = result.insertId;
 
-                                dbConnection.query("INSERT INTO occupazioni (prenotazione, spazio) VALUES (?, ?)", [idPrenotazione, idSpazio], function (err, result) {
-                                  if (err) {
-                                    response.status(400);
-                                    response.send("Errore Query \n\n" + err);
-                                  } else {
-                                    response.status(200);
-                                    response.send("Prenotazione inserita correttamente");
-                                  }
-                                });
-                              }
-                            });
-                          }
+                          dbConnection.query("INSERT INTO occupazioni (prenotazione, spazio) VALUES (?, ?)", [idPrenotazione, idSpazio], function (err, result) {
+                            if (err) {
+                              response.status(400);
+                              response.send("Errore Query \n\n" + err);
+                            } else {
+                              response.status(200);
+                              response.send("Prenotazione inserita correttamente");
+                            }
+                          });
                         }
                       });
                     }
@@ -240,122 +240,128 @@ dbConnection.connect(function (err) {
         }
       });
     });
-    /*
-    app.delete("/api/prenotazione", (request, response) => {
-        var idPrenotazione = request.query.idPrenotazione;
-     
-        dbConnection.query("DELETE FROM prenotazioni WHERE idPrenotazione = ?", [idPrenotazione], function (err, result) {
-            if (err) {
-                response.status(400);
-                response.send("Errore Query \n\n" + err);
+  }
+});
+/*
+app.delete("/api/prenotazione", (request, response) => {
+    var idPrenotazione = request.query.idPrenotazione;
+ 
+    dbConnection.query("DELETE FROM prenotazioni WHERE idPrenotazione = ?", [idPrenotazione], function (err, result) {
+        if (err) {
+            response.status(400);
+            response.send("Errore Query \n\n" + err);
+        } else {
+            dbConnection.query("DELETE FROM occupazioni WHERE prenotazione = ?", [idPrenotazione], function (err, result) {
+                if (err) {
+                    response.status(400);
+                    response.send("Errore Query \n\n" + err);
+                } else {
+                    response.status(200);
+                    response.send("Prenotazione con id = " + idPrenotazione + " eliminata");
+                }
+            });
+        }
+    });
+});
+*/
+
+//API Gestione Prenotazioni (Visualizzazione, Aggiunta e Eliminazione Spazi)
+app.get("/api/prenotazione/spazio", (request, response) => {
+  var idPrenotazione = request.query.idPrenotazione;
+
+  dbConnection.query("SELECT spazi.* FROM spazi INNER JOIN occupazioni ON spazi.idSpazio = occupazioni.spazio INNER JOIN prenotazioni ON occupazioni.prenotazione = prenotazioni.idPrenotazione WHERE prenotazioni.idPrenotazione = ?", [idPrenotazione], function (err, result) {
+    if (err) {
+      response.status(400);
+      response.send("Errore Query \n\n" + err);
+    } else {
+      if (isEmpty(result)) {
+        response.status(500);
+        response.send("La prenotazione non esiste");
+      } else {
+        response.status(200);
+        response.send(result);
+      }
+    }
+  });
+});
+app.post("/api/prenotazione/spazio", (request, response) => {
+  var idPrenotazione = request.query.idPrenotazione;
+  var idSpazio = request.query.idSpazio;
+
+  dbConnection.query("SELECT * FROM prenotazioni WHERE idPrenotazione = ?", [idPrenotazione], function (err, result) {
+    if (err) {
+      response.status(400);
+      response.send("Errore Query \n\n" + err);
+    } else {
+      if (isEmpty(result)) {
+        response.status(500);
+        response.send("La prenotazione con id = " + idPrenotazione + "non esiste")
+      } else {
+        var data = result[0].data;
+
+        dbConnection.query("SELECT * FROM occupazioni o JOIN prenotazioni p ON p.idPrenotazione = o.prenotazione WHERE o.spazio = ? AND p.data = ?", [idSpazio, data], function (err, result) {
+          if (err) {
+            response.status(400);
+            response.send("Errore Query \n\n" + err);
+          } else {
+            if (!isEmpty(result)) {
+              response.status(500);
+              response.send("Lo spazio con id = " + idSpazio + " è già riservato per quella data");
             } else {
-                dbConnection.query("DELETE FROM occupazioni WHERE prenotazione = ?", [idPrenotazione], function (err, result) {
-                    if (err) {
+              dbConnection.query("SELECT * FROM prenotazioni WHERE idPrenotazione = ?", [idPrenotazione], function (err, result) {
+                if (err) {
+                  response.status(400);
+                  response.send("Errore Query \n\n" + err);
+                } else {
+                  if (isEmpty(result)) {
+                    response.status(500);
+                    response.send("Non esiste una prenotazione con id = " + idPrenotazione);
+                  } else {
+                    dbConnection.query("SELECT * FROM spazi WHERE idSpazio = ?", [idSpazio], function (err, result) {
+                      if (err) {
                         response.status(400);
                         response.send("Errore Query \n\n" + err);
-                    } else {
-                        response.status(200);
-                        response.send("Prenotazione con id = " + idPrenotazione + " eliminata");
-                    }
-                });
-            }
-        });
-    });
-    */
-
-    //API Gestione Prenotazioni (Visualizzazione, Aggiunta e Eliminazione Spazi)
-    app.get("/api/prenotazione/spazio", (request, response) => {
-      var idPrenotazione = request.query.idPrenotazione;
-
-      dbConnection.query("SELECT spazi.* FROM spazi INNER JOIN occupazioni ON spazi.idSpazio = occupazioni.spazio INNER JOIN prenotazioni ON occupazioni.prenotazione = prenotazioni.idPrenotazione WHERE prenotazioni.idPrenotazione = ?", [idPrenotazione], function (err, result) {
-        if (err) {
-          response.status(400);
-          response.send("Errore Query \n\n" + err);
-        } else {
-          response.status(200);
-          response.send(result);
-        }
-      });
-    });
-    app.post("/api/prenotazione/spazio", (request, response) => {
-      var idPrenotazione = request.query.idPrenotazione;
-      var idSpazio = request.query.idSpazio;
-
-      dbConnection.query("SELECT * FROM prenotazioni WHERE idPrenotazione = ?", [idPrenotazione], function (err, result) {
-        if (err) {
-          response.status(400);
-          response.send("Errore Query \n\n" + err);
-        } else {
-          if (isEmpty(result)) {
-            response.status(500);
-            response.send("La prenotazione con id = " + idPrenotazione + "non esiste")
-          } else {
-            var data = result[0].data;
-
-            dbConnection.query("SELECT * FROM occupazioni o JOIN prenotazioni p ON p.idPrenotazione = o.prenotazione WHERE o.spazio = ? AND p.data = ?", [idSpazio, data], function (err, result) {
-              if (err) {
-                response.status(400);
-                response.send("Errore Query \n\n" + err);
-              } else {
-                if (!isEmpty(result)) {
-                  response.status(500);
-                  response.send("Lo spazio con id = " + idSpazio + " è già riservato per quella data");
-                } else {
-                  dbConnection.query("SELECT * FROM prenotazioni WHERE idPrenotazione = ?", [idPrenotazione], function (err, result) {
-                    if (err) {
-                      response.status(400);
-                      response.send("Errore Query \n\n" + err);
-                    } else {
-                      if (isEmpty(result)) {
-                        response.status(500);
-                        response.send("Non esiste una prenotazione con id = " + idPrenotazione);
                       } else {
-                        dbConnection.query("SELECT * FROM spazi WHERE idSpazio = ?", [idSpazio], function (err, result) {
-                          if (err) {
-                            response.status(400);
-                            response.send("Errore Query \n\n" + err);
-                          } else {
-                            if (isEmpty(result)) {
-                              response.status(500);
-                              response.send("Non esiste uno spazio con id = " + idSpazio);
+                        if (isEmpty(result)) {
+                          response.status(500);
+                          response.send("Non esiste uno spazio con id = " + idSpazio);
+                        } else {
+                          dbConnection.query("INSERT INTO occupazioni (prenotazione, spazio) VALUES (?, ?)", [idPrenotazione, idSpazio], function (err, result) {
+                            if (err) {
+                              response.status(400);
+                              response.send("Errore Query \n\n" + err);
                             } else {
-                              dbConnection.query("INSERT INTO occupazioni (prenotazione, spazio) VALUES (?, ?)", [idPrenotazione, idSpazio], function (err, result) {
-                                if (err) {
-                                  response.status(400);
-                                  response.send("Errore Query \n\n" + err);
-                                } else {
-                                  response.status(200);
-                                  response.send("Spazio correttamente aggiunto alla prenotazione");
-                                }
-                              });
+                              response.status(200);
+                              response.send("Spazio correttamente aggiunto alla prenotazione");
                             }
-                          }
-                        });
+                          });
+                        }
                       }
-                    }
-                  });
+                    });
+                  }
                 }
-              }
-            });
+              });
+            }
           }
-        }
-      });
-    });
-
-    //API Spazi
-    app.get("/api/spazio", (request, response) => {
-      dbConnection.query("SELECT spazi.idSpazio, spazi.cordinataX, spazi.cordinataY, tipospazio.nome AS tipo FROM spazi INNER JOIN tipospazio ON tipospazio.idTipo = spazi.tipo", function (err, result) {
-        if (err) {
-          response.status(400);
-          response.send("Errore Query \n\n" + err);
-        } else {
-          response.status(200);
-          response.send(result);
-        }
-      });
-    });
-  };
+        });
+      }
+    }
+  });
 });
+
+//API Spazi
+app.get("/api/spazio", (request, response) => {
+  dbConnection.query("SELECT spazi.idSpazio, spazi.cordinataX, spazi.cordinataY, tipospazio.nome AS tipo FROM spazi INNER JOIN tipospazio ON tipospazio.idTipo = spazi.tipo", function (err, result) {
+    if (err) {
+      response.status(400);
+      response.send("Errore Query \n\n" + err);
+    } else {
+      response.status(200);
+      response.send(result);
+    }
+  });
+});
+
 var isEmpty = function (obj) {
   return Object.keys(obj).length === 0;
 }
