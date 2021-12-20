@@ -100,7 +100,7 @@ app.listen(49146, () => {
  *       400:
  *         description: Errore durante l'inserimento
  *       500:
- *         description: Errore durante le query "SELECT"
+ *         description: Errore durante i controlli sui dati
  * /api/prenotazione/spazio:
  *   get:
  *     summary: Retituisce tutti gli spazi prenotati data un idPrenotazione
