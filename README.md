@@ -8,6 +8,6 @@
 
 ## Team
 
-Dennis Eccher
-Giulio Cappelli
-Marco Zani
+* Dennis Eccher
+* Giulio Cappelli
+* Marco Zani
